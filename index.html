@@ -1,0 +1,788 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chill-Notebook++LLM</title>
+    
+    <!-- External Dependencies: PDF.js and Google Fonts -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        /* --- CSS Variables & Theming --- */
+        :root {
+            /* Light Mode */
+            --bg: #f8fafc;
+            --surface: #ffffff;
+            --surface-hover: #f1f5f9;
+            --border: #e2e8f0;
+            --text: #1e293b;
+            --text-muted: #64748b;
+            --accent: #6d44b8;
+            --accent-hover: #5b389b;
+            --danger: #ef4444;
+            --success: #10b981;
+            --radius: 16px;
+            --shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+            --font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        body.dark-mode {
+            /* Dark Mode (Najaf/Framer aesthetic) */
+            --bg: #0a0f1c;
+            --surface: #151b2b;
+            --surface-hover: #1e2638;
+            --border: #2a324a;
+            --text: #f1f5f9;
+            --text-muted: #94a3b8;
+            --accent: #9d72ff;
+            --accent-hover: #b391ff;
+            --shadow: 0 4px 12px -1px rgb(0 0 0 / 0.5);
+        }
+
+        html[dir="rtl"] {
+            --font-family: 'Cairo', system-ui, -apple-system, sans-serif;
+        }
+
+        /* --- Reset & Base --- */
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: var(--font-family); background-color: var(--bg); color: var(--text); overflow: hidden; transition: background-color 0.3s, color 0.3s; }
+        button, input, select { font-family: inherit; outline: none; }
+        
+        /* --- Typography & Elements --- */
+        .btn {
+            background: var(--surface-hover); color: var(--text); border: 1px solid var(--border);
+            padding: 8px 16px; border-radius: 99px; cursor: pointer; font-weight: 500;
+            transition: var(--transition); display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+        }
+        .btn:hover { background: var(--border); transform: translateY(-1px); }
+        .btn-primary { background: linear-gradient(135deg, var(--accent), var(--accent-hover)); color: #fff; border: none; }
+        .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(109, 68, 184, 0.4); background: linear-gradient(135deg, var(--accent-hover), var(--accent)); }
+        
+        .input-field, .select-field {
+            background: var(--surface-hover); border: 1px solid var(--border); color: var(--text);
+            padding: 8px 16px; border-radius: 99px; transition: var(--transition);
+        }
+        .input-field:focus, .select-field:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(157, 114, 255, 0.2); }
+
+        /* --- Layout --- */
+        .topbar {
+            height: 64px; background: var(--surface); border-bottom: 1px solid var(--border);
+            display: flex; align-items: center; justify-content: space-between; padding: 0 24px;
+            z-index: 100; position: relative;
+        }
+        .logo-area { display: flex; align-items: center; gap: 12px; font-weight: 700; font-size: 1.25rem; color: var(--text); }
+        .logo-area svg { width: 24px; height: 24px; fill: var(--accent); }
+        .controls-area { display: flex; align-items: center; gap: 16px; }
+        .api-section { display: flex; align-items: center; gap: 8px; position: relative; }
+        .disclaimer-tooltip {
+            position: absolute; top: 100%; right: 0; background: var(--surface-hover); color: var(--text-muted);
+            font-size: 0.75rem; padding: 4px 8px; border-radius: 4px; margin-top: 4px; opacity: 0; pointer-events: none; transition: var(--transition);
+            white-space: nowrap; border: 1px solid var(--border);
+        }
+        .api-section:hover .disclaimer-tooltip { opacity: 1; }
+
+        .main-layout { display: flex; height: calc(100vh - 64px); }
+        .sidebar { width: 320px; background: var(--surface); display: flex; flex-direction: column; flex-shrink: 0; transition: var(--transition); z-index: 50; }
+        .left-sidebar { border-inline-end: 1px solid var(--border); }
+        .right-sidebar { border-inline-start: 1px solid var(--border); }
+        .center-content { flex-grow: 1; display: flex; flex-direction: column; position: relative; min-width: 0; }
+
+        /* --- Left Sidebar (Upload) --- */
+        .upload-section { padding: 24px; border-bottom: 1px solid var(--border); }
+        .upload-zone {
+            border: 2px dashed var(--border); border-radius: var(--radius); padding: 32px 16px;
+            text-align: center; cursor: pointer; transition: var(--transition); background: var(--surface-hover);
+        }
+        .upload-zone:hover, .upload-zone.dragover { border-color: var(--accent); background: rgba(157, 114, 255, 0.05); }
+        .upload-zone svg { width: 32px; height: 32px; fill: var(--text-muted); margin-bottom: 12px; transition: var(--transition); }
+        .upload-zone:hover svg { fill: var(--accent); }
+        .pdf-list-container { flex-grow: 1; overflow-y: auto; padding: 16px; }
+        .pdf-item {
+            display: flex; justify-content: space-between; align-items: center; padding: 12px 16px;
+            background: var(--bg); border-radius: 12px; margin-bottom: 8px; cursor: pointer; transition: var(--transition);
+            border: 1px solid transparent;
+        }
+        .pdf-item:hover { background: var(--surface-hover); }
+        .pdf-item.active { border-color: var(--accent); background: rgba(157, 114, 255, 0.1); }
+        .pdf-item-name { font-size: 0.875rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 80%; }
+        .pdf-item-delete { background: none; border: none; color: var(--danger); cursor: pointer; font-size: 1.2rem; opacity: 0.6; transition: var(--transition); }
+        .pdf-item-delete:hover { opacity: 1; transform: scale(1.1); }
+
+        /* --- Center Content (Tabs) --- */
+        .tabs-header { display: flex; border-bottom: 1px solid var(--border); background: var(--surface); padding: 0 16px; }
+        .tab-btn {
+            background: none; border: none; padding: 16px 24px; color: var(--text-muted); font-weight: 600;
+            cursor: pointer; position: relative; transition: var(--transition);
+        }
+        .tab-btn:hover { color: var(--text); }
+        .tab-btn.active { color: var(--accent); }
+        .tab-btn.active::after { content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 3px; background: var(--accent); border-radius: 3px 3px 0 0; }
+        
+        .tab-content { display: none; flex-grow: 1; flex-direction: column; overflow: hidden; animation: fadeIn 0.4s ease; }
+        .tab-content.active { display: flex; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* PDF Viewer Tab */
+        .pdf-toolbar { display: flex; align-items: center; justify-content: center; gap: 12px; padding: 12px; border-bottom: 1px solid var(--border); background: var(--surface-hover); }
+        .pdf-viewer-area { flex-grow: 1; overflow: auto; display: flex; justify-content: center; background: var(--bg); padding: 24px; }
+        canvas#pdfCanvas { border-radius: 8px; box-shadow: var(--shadow); max-width: none; }
+
+        /* Workflow Tab */
+        .workflow-toolbar { display: flex; gap: 12px; padding: 16px; background: var(--surface); border-bottom: 1px solid var(--border); }
+        .workflow-toolbar input { flex-grow: 1; }
+        .workflow-canvas-container { flex-grow: 1; position: relative; overflow: auto; background: var(--bg); cursor: grab; }
+        .workflow-canvas-container:active { cursor: grabbing; }
+        svg#workflowSvg { position: absolute; top: 0; left: 0; width: 4000px; height: 4000px; pointer-events: none; }
+        .connection { fill: none; stroke: var(--accent); stroke-width: 2px; opacity: 0.6; }
+        .mindmap-node {
+            position: absolute; background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+            padding: 12px 16px; min-width: 140px; text-align: center; box-shadow: var(--shadow);
+            cursor: move; user-select: none; transition: box-shadow 0.2s; z-index: 10;
+        }
+        .mindmap-node:hover { box-shadow: 0 8px 16px rgba(0,0,0,0.1); border-color: var(--accent); }
+        .mindmap-node:focus { outline: 2px solid var(--accent); }
+        .node-actions { position: absolute; top: -30px; left: 50%; transform: translateX(-50%); display: flex; gap: 4px; background: var(--surface-hover); padding: 4px; border-radius: 8px; border: 1px solid var(--border); }
+        .node-actions button { background: none; border: none; color: var(--text); cursor: pointer; font-size: 1rem; padding: 0 4px; }
+
+        /* Presentation Tab */
+        .slides-viewer { flex-grow: 1; position: relative; background: var(--bg); display: flex; align-items: center; justify-content: center; overflow: hidden; padding: 24px; }
+        .slide-nav { position: absolute; top: 50%; transform: translateY(-50%); background: var(--surface); border: 1px solid var(--border); color: var(--text); border-radius: 50%; width: 48px; height: 48px; display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 20; transition: var(--transition); box-shadow: var(--shadow); font-size: 1.5rem; }
+        .slide-nav:hover { background: var(--accent); color: white; border-color: var(--accent); }
+        .slide-nav.prev { left: 24px; }
+        .slide-nav.next { right: 24px; }
+        .slides-container { position: relative; width: 100%; max-width: 900px; aspect-ratio: 16/9; background: var(--surface); border-radius: 24px; box-shadow: var(--shadow); overflow: hidden; border: 1px solid var(--border); }
+        .slide { position: absolute; top: 0; left: 0; width: 100%; height: 100%; padding: 60px; opacity: 0; pointer-events: none; transition: opacity 0.5s ease; display: flex; flex-direction: column; justify-content: center; }
+        .slide.active { opacity: 1; pointer-events: auto; }
+        .slide h2 { font-size: 3rem; margin-bottom: 2rem; color: var(--accent); outline: none; }
+        .slide h2:focus, .slide ul:focus { background: rgba(157, 114, 255, 0.05); border-radius: 8px; }
+        .slide ul { font-size: 1.5rem; line-height: 1.8; color: var(--text); outline: none; padding-inline-start: 2rem; }
+        .slide-dots { position: absolute; bottom: 24px; left: 50%; transform: translateX(-50%); display: flex; gap: 8px; z-index: 20; }
+        .slide-dot { width: 12px; height: 12px; border-radius: 50%; background: var(--border); cursor: pointer; transition: var(--transition); }
+        .slide-dot.active { background: var(--accent); transform: scale(1.2); }
+
+        /* --- Right Sidebar (Chat) --- */
+        .chat-container { display: flex; flex-direction: column; height: 100%; }
+        .chat-history { flex-grow: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 16px; }
+        .chat-bubble { max-width: 85%; padding: 12px 16px; border-radius: 16px; font-size: 0.95rem; line-height: 1.5; word-wrap: break-word; animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+        @keyframes popIn { from { opacity: 0; transform: scale(0.9) translateY(10px); } to { opacity: 1; transform: scale(1) translateY(0); } }
+        .chat-bubble.user { margin-inline-start: auto; background: var(--accent); color: #fff; border-bottom-right-radius: 4px; }
+        .chat-bubble.ai { margin-inline-end: auto; background: var(--surface-hover); color: var(--text); border-bottom-left-radius: 4px; border: 1px solid var(--border); }
+        .chat-bubble.skeleton { color: transparent; background: linear-gradient(90deg, var(--surface-hover) 25%, var(--border) 50%, var(--surface-hover) 75%); background-size: 200% 100%; animation: loading 1.5s infinite; }
+        @keyframes loading { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+        
+        .chat-input-area { padding: 16px; border-top: 1px solid var(--border); background: var(--surface); display: flex; gap: 8px; }
+        .chat-input-area input { flex-grow: 1; }
+
+        /* --- Toasts --- */
+        #toast-container { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); z-index: 9999; display: flex; flex-direction: column; gap: 10px; pointer-events: none; }
+        .toast { padding: 12px 24px; border-radius: 99px; background: var(--surface); color: var(--text); box-shadow: 0 10px 25px -5px rgba(0,0,0,0.3); opacity: 0; transform: translateY(20px); transition: var(--transition); border-inline-start: 4px solid var(--accent); font-weight: 500; display: flex; align-items: center; gap: 8px; }
+        .toast.show { opacity: 1; transform: translateY(0); }
+        .toast.error { border-inline-start-color: var(--danger); }
+        .toast.success { border-inline-start-color: var(--success); }
+
+        /* --- Mobile Responsiveness --- */
+        .mobile-toggle { display: none; background: none; border: none; color: var(--text); font-size: 1.5rem; cursor: pointer; }
+        @media (max-width: 1024px) {
+            .mobile-toggle { display: block; }
+            .sidebar { position: absolute; height: 100%; z-index: 200; box-shadow: var(--shadow); transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1); }
+            html[dir="ltr"] .left-sidebar { transform: translateX(-100%); }
+            html[dir="rtl"] .left-sidebar { transform: translateX(100%); right: 0; left: auto; }
+            html[dir="ltr"] .right-sidebar { transform: translateX(100%); right: 0; left: auto; }
+            html[dir="rtl"] .right-sidebar { transform: translateX(-100%); left: 0; right: auto; }
+            
+            .sidebar.open { transform: translateX(0) !important; }
+            .api-section input { width: 120px; }
+        }
+        @media (max-width: 600px) {
+            .controls-area { gap: 8px; }
+            .api-section select { display: none; } /* simplify topbar on tiny screens */
+            .tab-btn { padding: 12px; font-size: 0.85rem; }
+        }
+    </style>
+</head>
+<body class="dark-mode">
+
+    <div id="toast-container"></div>
+
+    <header class="topbar">
+        <div class="logo-area">
+            <button class="mobile-toggle" id="btnToggleLeft">☰</button>
+            <svg viewBox="0 0 24 24"><path d="M4 4v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6H6a2 2 0 0 0-2 2zm14 16H6V4h7v5h5v11z"/></svg>
+            <span data-i18n="appTitle">Chill-Notebook++LLM</span>
+        </div>
+        <div class="controls-area">
+            <select id="langSelect" class="select-field">
+                <option value="en" data-i18n="langEn">English</option>
+                <option value="hi" data-i18n="langHi">Hindi</option>
+                <option value="ar" data-i18n="langAr">Arabic</option>
+            </select>
+            <button id="themeToggle" class="btn">🌙</button>
+            <div class="api-section">
+                <input type="password" id="apiKey" class="input-field" data-i18n-placeholder="apiKeyPlaceholder" placeholder="Enter your API Key">
+                <select id="providerSelect" class="select-field">
+                    <option value="gemini" data-i18n="providerGemini">Gemini 3.1 Flash-Lite</option>
+                    <option value="chatgpt" data-i18n="providerGPT">ChatGPT</option>
+                    <option value="cursor" disabled data-i18n="providerCursor">Cursor (Coming soon)</option>
+                </select>
+                <div class="disclaimer-tooltip" data-i18n="disclaimer">Your API key is used only in your browser and never stored on any server.</div>
+            </div>
+            <button class="mobile-toggle" id="btnToggleRight">💬</button>
+        </div>
+    </header>
+
+    <main class="main-layout">
+        <!-- Left Sidebar: Upload & List -->
+        <aside class="sidebar left-sidebar" id="leftSidebar">
+            <div class="upload-section">
+                <div class="upload-zone" id="uploadZone">
+                    <svg viewBox="0 0 24 24"><path d="M19 13v5c0 .55-.45 1-1 1H6c-.55 0-1-.45-1-1v-5c0-.55-.45-1-1-1s-1 .45-1 1v6c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-6c0-.55-.45-1-1-1s-1 .45-1 1zm-5.29-6.71L13 2.59c-.28-.28-.72-.28-1 0L8.29 6.29c-.39.39-.39 1.02 0 1.41.39.39 1.02.39 1.41 0L11 6.41V16c0 .55.45 1 1 1s1-.45 1-1V6.41l1.29 1.29c.39.39 1.02.39 1.41 0 .39-.39.39-1.02 0-1.41z"/></svg>
+                    <p data-i18n="dropText">Drop PDFs here or click to upload</p>
+                    <input type="file" id="fileInput" accept="application/pdf" multiple style="display:none;">
+                </div>
+            </div>
+            <div class="pdf-list-container" id="pdfList"></div>
+        </aside>
+
+        <!-- Center Content: Tabs -->
+        <section class="center-content">
+            <div class="tabs-header">
+                <button class="tab-btn active" data-target="pdfViewerTab" data-i18n="pdfViewerTab">PDF Viewer</button>
+                <button class="tab-btn" data-target="workflowTab" data-i18n="workflowTab">Workflow</button>
+                <button class="tab-btn" data-target="presentationTab" data-i18n="presentationTab">Presentation</button>
+            </div>
+
+            <!-- Tab 1: PDF Viewer -->
+            <div class="tab-content active" id="pdfViewerTab">
+                <div class="pdf-toolbar">
+                    <button class="btn" id="pdfPrev">&larr;</button>
+                    <span style="font-size: 0.9rem; font-weight: 500;"><span data-i18n="page">Page</span> <span id="pdfPageNum">0</span> <span data-i18n="of">of</span> <span id="pdfPageCount">0</span></span>
+                    <button class="btn" id="pdfNext">&rarr;</button>
+                    <button class="btn" id="pdfZoomOut" data-i18n="zoomOut">Zoom Out</button>
+                    <button class="btn" id="pdfZoomIn" data-i18n="zoomIn">Zoom In</button>
+                </div>
+                <div class="pdf-viewer-area" id="pdfContainer">
+                    <canvas id="pdfCanvas"></canvas>
+                </div>
+            </div>
+
+            <!-- Tab 2: Workflow -->
+            <div class="tab-content" id="workflowTab">
+                <div class="workflow-toolbar">
+                    <input type="text" id="workflowQuery" class="input-field" data-i18n-placeholder="workflowPrompt" placeholder="Describe what kind of roadmap/mind-map you want...">
+                    <button class="btn btn-primary" id="btnGenWorkflow" data-i18n="generateWorkflow">Generate Mind-map</button>
+                    <button class="btn" id="btnExpPng" data-i18n="exportPng">Export PNG</button>
+                </div>
+                <div class="workflow-canvas-container" id="workflowArea">
+                    <svg id="workflowSvg"></svg>
+                    <!-- Nodes injected via JS -->
+                </div>
+            </div>
+
+            <!-- Tab 3: Presentation -->
+            <div class="tab-content" id="presentationTab">
+                <div class="workflow-toolbar">
+                    <input type="text" id="presQuery" class="input-field" data-i18n-placeholder="workflowPrompt" placeholder="Describe your presentation goal...">
+                    <button class="btn btn-primary" id="btnGenPres" data-i18n="generatePresentation">Generate Presentation</button>
+                    <button class="btn" id="btnExpPdf" data-i18n="exportSlides">Export to PDF</button>
+                </div>
+                <div class="slides-viewer">
+                    <button class="slide-nav prev" id="slidePrev">&larr;</button>
+                    <div class="slides-container" id="slidesContainer">
+                        <!-- Slides injected via JS -->
+                    </div>
+                    <button class="slide-nav next" id="slideNext">&rarr;</button>
+                    <div class="slide-dots" id="slideDots"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Right Sidebar: Chat -->
+        <aside class="sidebar right-sidebar" id="rightSidebar">
+            <div class="chat-container">
+                <div class="chat-history" id="chatHistory"></div>
+                <div class="chat-input-area">
+                    <input type="text" id="chatInput" class="input-field" data-i18n-placeholder="chatPlaceholder" placeholder="Type your message...">
+                    <button class="btn btn-primary" id="btnSendChat" data-i18n="sendBtn">Send</button>
+                </div>
+            </div>
+        </aside>
+    </main>
+
+    <script>
+        // --- Configuration & Initialization ---
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+        // --- Translations ---
+        const i18n = {
+            en: {
+                appTitle: "Chill-Notebook++LLM", langEn: "English", langHi: "Hindi", langAr: "Arabic",
+                apiKeyPlaceholder: "Enter your API Key", providerGemini: "Gemini 3.1 Flash-Lite", providerGPT: "ChatGPT", providerCursor: "Cursor (Coming soon)",
+                disclaimer: "Your API key is used only in your browser and never stored on any server.", dropText: "Drop PDFs here or click to upload",
+                pdfViewerTab: "PDF Viewer", workflowTab: "Workflow", presentationTab: "Presentation",
+                chatPlaceholder: "Type your message...", sendBtn: "Send",
+                page: "Page", of: "of", zoomIn: "Zoom In", zoomOut: "Zoom Out",
+                workflowPrompt: "Describe what kind of roadmap/mind-map you want...", generateWorkflow: "Generate Mind-map", exportPng: "Export as PNG",
+                generatePresentation: "Generate Presentation", exportSlides: "Export to PDF",
+                errorNoKey: "Please enter your API Key to use AI features.", errorSize: "File exceeds 3MB limit.", errorMax: "Maximum 5 files allowed.",
+                errorAPI: "API Error. Check your key or try again.", successUpload: "File uploaded successfully!",
+                slideWait: "Generating slides... Please wait.", mapWait: "Generating mind-map... Please wait.",
+                defaultAI: "Hello! I am your AI assistant. Upload a PDF and ask me anything about it, or generate workflows and presentations."
+            },
+            hi: {
+                appTitle: "चिल-नोटबुक++LLM", langEn: "अंग्रेज़ी", langHi: "हिंदी", langAr: "अरबी",
+                apiKeyPlaceholder: "अपनी एपीआई कुंजी दर्ज करें", providerGemini: "Gemini 3.1 Flash-Lite", providerGPT: "ChatGPT", providerCursor: "Cursor (जल्द आ रहा है)",
+                disclaimer: "आपकी API कुंजी केवल आपके ब्राउज़र में उपयोग की जाती है और सर्वर पर सहेजी नहीं जाती है।", dropText: "PDF यहाँ छोड़ें या अपलोड करने के लिए क्लिक करें",
+                pdfViewerTab: "पीडीएफ दर्शक", workflowTab: "कार्यप्रवाह", presentationTab: "प्रस्तुतीकरण",
+                chatPlaceholder: "अपना संदेश टाइप करें...", sendBtn: "भेजें",
+                page: "पृष्ठ", of: "का", zoomIn: "ज़ूम इन", zoomOut: "ज़ूम आउट",
+                workflowPrompt: "वर्णन करें कि आपको किस प्रकार का माइंड-मैप चाहिए...", generateWorkflow: "माइंड-मैप जनरेट करें", exportPng: "PNG के रूप में निर्यात करें",
+                generatePresentation: "प्रस्तुतीकरण जनरेट करें", exportSlides: "PDF में निर्यात करें",
+                errorNoKey: "कृपया AI सुविधाओं का उपयोग करने के लिए अपनी API कुंजी दर्ज करें।", errorSize: "फ़ाइल 3MB सीमा से अधिक है।", errorMax: "अधिकतम 5 फ़ाइलों की अनुमति है।",
+                errorAPI: "एपीआई त्रुटि। कुंजी की जांच करें या पुनः प्रयास करें।", successUpload: "फ़ाइल सफलतापूर्वक अपलोड हो गई!",
+                slideWait: "स्लाइड्स जनरेट हो रही हैं... कृपया प्रतीक्षा करें।", mapWait: "माइंड-मैप जनरेट हो रहा है... कृपया प्रतीक्षा करें।",
+                defaultAI: "नमस्ते! मैं आपका AI सहायक हूँ। PDF अपलोड करें और मुझसे इसके बारे में कुछ भी पूछें।"
+            },
+            ar: {
+                appTitle: "تشيل-دفتر++LLM", langEn: "إنجليزي", langHi: "هندي", langAr: "عربي",
+                apiKeyPlaceholder: "أدخل مفتاح API الخاص بك", providerGemini: "Gemini 3.1 Flash-Lite", providerGPT: "ChatGPT", providerCursor: "Cursor (قريباً)",
+                disclaimer: "يُستخدم مفتاح API الخاص بك في متصفحك فقط ولا يتم حفظه على أي خادم أبدًا.", dropText: "أسقط ملفات PDF هنا أو انقر للتحميل",
+                pdfViewerTab: "عارض PDF", workflowTab: "سير العمل", presentationTab: "عرض تقديمي",
+                chatPlaceholder: "اكتب رسالتك...", sendBtn: "إرسال",
+                page: "صفحة", of: "من", zoomIn: "تكبير", zoomOut: "تصغير",
+                workflowPrompt: "صف نوع الخريطة الذهنية التي تريدها...", generateWorkflow: "توليد خريطة ذهنية", exportPng: "تصدير كـ PNG",
+                generatePresentation: "توليد عرض تقديمي", exportSlides: "تصدير إلى PDF",
+                errorNoKey: "يرجى إدخال مفتاح API الخاص بك لاستخدام ميزات الذكاء الاصطناعي.", errorSize: "الملف يتجاوز حد 3 ميغابايت.", errorMax: "يسمح بـ 5 ملفات كحد أقصى.",
+                errorAPI: "خطأ في واجهة برمجة التطبيقات. تحقق من المفتاح.", successUpload: "تم تحميل الملف بنجاح!",
+                slideWait: "جاري توليد الشرائح... يرجى الانتظار.", mapWait: "جاري توليد الخريطة الذهنية... يرجى الانتظار.",
+                defaultAI: "مرحباً! أنا مساعدك الذكي. قم بتحميل ملف PDF واسألني أي شيء عنه."
+            }
+        };
+
+        let currentLang = 'en';
+
+        function applyTranslations() {
+            currentLang = document.getElementById('langSelect').value;
+            const dict = i18n[currentLang];
+            document.documentElement.dir = currentLang === 'ar' ? 'rtl' : 'ltr';
+            document.documentElement.lang = currentLang;
+            
+            document.querySelectorAll('[data-i18n]').forEach(el => {
+                if(dict[el.dataset.i18n]) el.innerText = dict[el.dataset.i18n];
+            });
+            document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+                if(dict[el.dataset.i18nPlaceholder]) el.placeholder = dict[el.dataset.i18nPlaceholder];
+            });
+        }
+        document.getElementById('langSelect').addEventListener('change', applyTranslations);
+
+        // --- Theme Toggle ---
+        const themeToggle = document.getElementById('themeToggle');
+        themeToggle.addEventListener('click', () => {
+            document.body.classList.toggle('dark-mode');
+            themeToggle.innerText = document.body.classList.contains('dark-mode') ? '🌙' : '☀️';
+        });
+
+        // --- Mobile Sidebars ---
+        document.getElementById('btnToggleLeft').onclick = () => document.getElementById('leftSidebar').classList.toggle('open');
+        document.getElementById('btnToggleRight').onclick = () => document.getElementById('rightSidebar').classList.toggle('open');
+
+        // --- Toasts & Animations ---
+        function showToast(msg, type='info') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.innerHTML = (type==='success'?'✅ ' : type==='error'?'❌ ' : 'ℹ️ ') + msg;
+            container.appendChild(toast);
+            setTimeout(() => toast.classList.add('show'), 10);
+            setTimeout(() => { toast.classList.remove('show'); setTimeout(() => toast.remove(), 300); }, 3000);
+        }
+
+        function fireConfetti() {
+            const canvas = document.createElement('canvas');
+            canvas.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;pointer-events:none;z-index:9999;';
+            document.body.appendChild(canvas);
+            const ctx = canvas.getContext('2d');
+            canvas.width = window.innerWidth; canvas.height = window.innerHeight;
+            const pieces = Array.from({length:60}).map(()=>({ x: canvas.width/2, y: canvas.height/2, vx: (Math.random()-0.5)*25, vy: (Math.random()-1)*25, s: Math.random()*8+4, c: `hsl(${Math.random()*360},100%,50%)` }));
+            function render() {
+                ctx.clearRect(0,0,canvas.width,canvas.height);
+                let active = false;
+                pieces.forEach(p => { p.x += p.vx; p.y += p.vy; p.vy += 0.5; if(p.y < canvas.height) active = true; ctx.fillStyle = p.c; ctx.fillRect(p.x, p.y, p.s, p.s); });
+                if(active) requestAnimationFrame(render); else canvas.remove();
+            }
+            render();
+        }
+
+        // --- Tabs ---
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                btn.classList.add('active');
+                document.getElementById(btn.dataset.target).classList.add('active');
+            });
+        });
+
+        // --- PDF Logic ---
+        let pdfFiles = [];
+        let currentPdf = null;
+        let pageNum = 1;
+        let pdfScale = 1.2;
+        const canvas = document.getElementById('pdfCanvas');
+        const ctx = canvas.getContext('2d');
+
+        const uploadZone = document.getElementById('uploadZone');
+        const fileInput = document.getElementById('fileInput');
+
+        uploadZone.onclick = () => fileInput.click();
+        uploadZone.ondragover = (e) => { e.preventDefault(); uploadZone.classList.add('dragover'); };
+        uploadZone.ondragleave = () => uploadZone.classList.remove('dragover');
+        uploadZone.ondrop = (e) => { e.preventDefault(); uploadZone.classList.remove('dragover'); handleFiles(e.dataTransfer.files); };
+        fileInput.onchange = (e) => handleFiles(e.target.files);
+
+        async function handleFiles(files) {
+            for(let f of files) {
+                if(f.type !== 'application/pdf') continue;
+                if(pdfFiles.length >= 5) { showToast(i18n[currentLang].errorMax, 'error'); break; }
+                if(f.size > 3 * 1024 * 1024) { showToast(i18n[currentLang].errorSize, 'error'); continue; }
+                
+                const arrayBuffer = await f.arrayBuffer();
+                const pdfDoc = await pdfjsLib.getDocument({data: new Uint8Array(arrayBuffer)}).promise;
+                pdfFiles.push({ id: Date.now()+Math.random(), name: f.name, size: f.size, pdfDoc });
+                showToast(i18n[currentLang].successUpload, 'success');
+                fireConfetti();
+            }
+            renderPdfList();
+            if(pdfFiles.length > 0 && !currentPdf) selectPdf(pdfFiles[0].id);
+        }
+
+        function renderPdfList() {
+            const list = document.getElementById('pdfList');
+            list.innerHTML = '';
+            pdfFiles.forEach(pf => {
+                let div = document.createElement('div');
+                div.className = `pdf-item ${currentPdf && currentPdf.id === pf.id ? 'active' : ''}`;
+                div.innerHTML = `<span class="pdf-item-name" title="${pf.name}">${pf.name}</span><button class="pdf-item-delete" onclick="deletePdf('${pf.id}', event)">&times;</button>`;
+                div.onclick = () => selectPdf(pf.id);
+                list.appendChild(div);
+            });
+        }
+
+        function selectPdf(id) {
+            currentPdf = pdfFiles.find(f => f.id == id);
+            if(currentPdf) { pageNum = 1; renderPage(pageNum); renderPdfList(); }
+        }
+
+        function deletePdf(id, e) {
+            e.stopPropagation();
+            pdfFiles = pdfFiles.filter(f => f.id != id);
+            if(currentPdf && currentPdf.id == id) {
+                currentPdf = pdfFiles.length > 0 ? pdfFiles[0] : null;
+                if(currentPdf) { pageNum=1; renderPage(pageNum); } else { ctx.clearRect(0,0,canvas.width,canvas.height); document.getElementById('pdfPageNum').innerText = 0; document.getElementById('pdfPageCount').innerText = 0; }
+            }
+            renderPdfList();
+        }
+
+        async function renderPage(num) {
+            if(!currentPdf) return;
+            const page = await currentPdf.pdfDoc.getPage(num);
+            const viewport = page.getViewport({ scale: pdfScale });
+            canvas.height = viewport.height; canvas.width = viewport.width;
+            await page.render({ canvasContext: ctx, viewport: viewport }).promise;
+            document.getElementById('pdfPageNum').innerText = num;
+            document.getElementById('pdfPageCount').innerText = currentPdf.pdfDoc.numPages;
+        }
+
+        document.getElementById('pdfPrev').onclick = () => { if(pageNum <= 1) return; pageNum--; renderPage(pageNum); };
+        document.getElementById('pdfNext').onclick = () => { if(currentPdf && pageNum >= currentPdf.pdfDoc.numPages) return; pageNum++; renderPage(pageNum); };
+        document.getElementById('pdfZoomIn').onclick = () => { pdfScale += 0.2; renderPage(pageNum); };
+        document.getElementById('pdfZoomOut').onclick = () => { pdfScale = Math.max(0.4, pdfScale - 0.2); renderPage(pageNum); };
+
+        async function extractAllPDFText() {
+            let fullText = "";
+            for (const file of pdfFiles) {
+                for (let i = 1; i <= file.pdfDoc.numPages; i++) {
+                    const page = await file.pdfDoc.getPage(i);
+                    const content = await page.getTextContent();
+                    fullText += content.items.map(item => item.str).join(" ") + " ";
+                    if (fullText.length > 30000) return fullText; // Limit for LLM context
+                }
+            }
+            return fullText;
+        }
+
+        // --- LLM API Logic ---
+        function parseLLMJSON(text) {
+            text = text.replace(/```json/gi, '').replace(/```/gi, '').trim();
+            const firstIdx = Math.max(0, Math.min(text.indexOf('{')!==-1?text.indexOf('{'):Infinity, text.indexOf('[')!==-1?text.indexOf('['):Infinity));
+            const lastIdx = Math.max(text.lastIndexOf('}'), text.lastIndexOf(']'));
+            if(firstIdx !== Infinity && lastIdx !== -1) text = text.substring(firstIdx, lastIdx + 1);
+            return JSON.parse(text);
+        }
+
+        async function fetchAIResponse(prompt, sysInstruction) {
+            const provider = document.getElementById('providerSelect').value;
+            const apiKey = document.getElementById('apiKey').value.trim();
+            if (!apiKey) throw new Error("NoKey");
+
+            if (provider === "gemini") {
+                const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=${apiKey}`;
+                const res = await fetch(url, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        systemInstruction: { parts: [{ text: sysInstruction }] },
+                        contents: [{ parts: [{ text: prompt }] }]
+                    })
+                });
+                if (!res.ok) {
+                    const errData = await res.json().catch(()=>({}));
+                    console.error("Gemini API Error:", errData);
+                    throw new Error(errData.error?.message || "API Error");
+                }
+                const data = await res.json();
+                return data.candidates[0].content.parts[0].text;
+            } else { // chatgpt
+                const url = `https://api.openai.com/v1/chat/completions`;
+                const res = await fetch(url, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+                    body: JSON.stringify({
+                        model: "gpt-4o", messages: [ { role: "system", content: sysInstruction }, { role: "user", content: prompt } ]
+                    })
+                });
+                if (!res.ok) {
+                    const errData = await res.json().catch(()=>({}));
+                    console.error("OpenAI API Error:", errData);
+                    throw new Error(errData.error?.message || "API Error");
+                }
+                const data = await res.json();
+                return data.choices[0].message.content;
+            }
+        }
+
+        // --- Chat ---
+        let chatMessages = [];
+        function addChatBubble(role, text, isSkeleton = false) {
+            const container = document.getElementById('chatHistory');
+            const div = document.createElement('div');
+            div.className = `chat-bubble ${role} ${isSkeleton ? 'skeleton' : ''}`;
+            div.innerText = text;
+            container.appendChild(div);
+            container.scrollTop = container.scrollHeight;
+            return div;
+        }
+        
+        // Initial Greeting
+        setTimeout(() => addChatBubble('ai', i18n.en.defaultAI), 500);
+
+        document.getElementById('btnSendChat').onclick = async () => {
+            const input = document.getElementById('chatInput');
+            const text = input.value.trim();
+            if(!text) return;
+            const apiKey = document.getElementById('apiKey').value.trim();
+            if(!apiKey) { showToast(i18n[currentLang].errorNoKey, 'error'); return; }
+            
+            addChatBubble('user', text);
+            input.value = '';
+            const skeleton = addChatBubble('ai', '...', true);
+            
+            try {
+                let promptText = "History:\n";
+                chatMessages.slice(-6).forEach(m => promptText += `${m.role}: ${m.text}\n`);
+                const pdfContext = await extractAllPDFText();
+                if(pdfContext) promptText += `Context from PDF: ${pdfContext.substring(0,5000)}\n`;
+                promptText += `User: ${text}\nAI:`;
+                
+                const response = await fetchAIResponse(promptText, "You are a helpful assistant. Keep responses plain text.");
+                skeleton.remove();
+                addChatBubble('ai', response);
+                chatMessages.push({role: 'user', text}, {role: 'ai', text: response});
+            } catch(e) {
+                skeleton.remove();
+                showToast(e.message === "NoKey" ? i18n[currentLang].errorNoKey : (e.message || i18n[currentLang].errorAPI), 'error');
+            }
+        };
+
+        // --- Workflow (Mindmap) ---
+        let mindmapNodes = [], mindmapLinks = [];
+        
+        document.getElementById('btnGenWorkflow').onclick = async () => {
+            const query = document.getElementById('workflowQuery').value;
+            const text = await extractAllPDFText();
+            if(!text && !query) { showToast('Provide a PDF or query.', 'error'); return; }
+            
+            showToast(i18n[currentLang].mapWait, 'info');
+            const prompt = `Generate a JSON mind-map based on: ${text.substring(0,15000)}\nQuery: ${query}\nFormat strictly as: {"id": "root", "text": "Main", "children": [{"id": "c1", "text": "Sub", "children": []}]}. Only output valid JSON.`;
+            
+            try {
+                const res = await fetchAIResponse(prompt, "Output ONLY valid JSON.");
+                const data = parseLLMJSON(res);
+                mindmapNodes = []; mindmapLinks = [];
+                layoutMindMap(data, 100, window.innerHeight/2 - 100);
+                refreshMindMapDOM();
+                fireConfetti();
+            } catch(e) { showToast(e.message === "NoKey" ? i18n[currentLang].errorNoKey : (e.message || i18n[currentLang].errorAPI), 'error'); }
+        };
+
+        let currentY = 100;
+        function layoutMindMap(node, depthX) {
+            let n = { id: node.id || 'n'+Date.now()+Math.random(), text: node.text || 'Node', x: depthX, y: 0 };
+            mindmapNodes.push(n);
+            if (!node.children || node.children.length === 0) {
+                n.y = currentY; currentY += 80;
+            } else {
+                let startY = currentY;
+                node.children.forEach(c => {
+                    let cn = layoutMindMap(c, depthX + 260);
+                    mindmapLinks.push({source: n, target: cn});
+                });
+                n.y = (startY + (currentY - 80)) / 2;
+            }
+            return n;
+        }
+
+        function refreshMindMapDOM() {
+            const container = document.getElementById('workflowArea');
+            const svg = document.getElementById('workflowSvg');
+            // Remove existing nodes
+            container.querySelectorAll('.mindmap-node').forEach(n => n.remove());
+            svg.innerHTML = '';
+            
+            // Draw links
+            mindmapLinks.forEach(l => {
+                let path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                let d = `M ${l.source.x + 140} ${l.source.y + 25} C ${l.source.x + 200} ${l.source.y + 25}, ${l.target.x - 60} ${l.target.y + 25}, ${l.target.x} ${l.target.y + 25}`;
+                path.setAttribute('d', d); path.classList.add('connection'); svg.appendChild(path);
+            });
+
+            // Draw nodes
+            mindmapNodes.forEach(n => {
+                let div = document.createElement('div');
+                div.className = 'mindmap-node';
+                div.style.left = n.x + 'px'; div.style.top = n.y + 'px';
+                div.contentEditable = true; div.innerText = n.text;
+                
+                // Interaction
+                div.onblur = () => n.text = div.innerText;
+                div.onclick = (e) => {
+                    if(e.target !== div) return;
+                    container.querySelectorAll('.node-actions').forEach(el => el.remove());
+                    let actions = document.createElement('div'); actions.className = 'node-actions';
+                    actions.innerHTML = `<button title="Add Child" onclick="addMapNode('${n.id}', event)">+</button><button title="Remove" onclick="remMapNode('${n.id}', event)">-</button>`;
+                    div.appendChild(actions);
+                };
+                
+                // Dragging
+                let isDragging = false, startX, startY, initX, initY;
+                div.onmousedown = (e) => { if(e.target !== div) return; isDragging = true; startX = e.clientX; startY = e.clientY; initX = n.x; initY = n.y; div.style.zIndex = 100; };
+                document.addEventListener('mousemove', (e) => { if(!isDragging) return; n.x = initX + (e.clientX - startX); n.y = initY + (e.clientY - startY); refreshMindMapDOM(); });
+                document.addEventListener('mouseup', () => { if(isDragging){ isDragging = false; div.style.zIndex = ''; } });
+
+                container.appendChild(div);
+            });
+        }
+
+        window.addMapNode = (id, e) => {
+            e.stopPropagation(); const p = mindmapNodes.find(n => n.id === id);
+            if(p) { const nn = {id:'n'+Date.now(), text:"New", x:p.x+260, y:p.y+60}; mindmapNodes.push(nn); mindmapLinks.push({source:p, target:nn}); refreshMindMapDOM(); }
+        };
+        window.remMapNode = (id, e) => {
+            e.stopPropagation(); mindmapNodes = mindmapNodes.filter(n => n.id !== id); mindmapLinks = mindmapLinks.filter(l => l.source.id !== id && l.target.id !== id); refreshMindMapDOM();
+        };
+
+        document.getElementById('btnExpPng').onclick = () => {
+            if(mindmapNodes.length === 0) return;
+            const canvas = document.createElement('canvas'); canvas.width = 3000; canvas.height = 3000; const ctx = canvas.getContext('2d');
+            ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--bg').trim(); ctx.fillRect(0,0,canvas.width,canvas.height);
+            ctx.strokeStyle = getComputedStyle(document.body).getPropertyValue('--accent').trim(); ctx.lineWidth = 2;
+            mindmapLinks.forEach(l => { ctx.beginPath(); ctx.moveTo(l.source.x+140, l.source.y+25); ctx.bezierCurveTo(l.source.x+200, l.source.y+25, l.target.x-60, l.target.y+25, l.target.x, l.target.y+25); ctx.stroke(); });
+            ctx.font = '14px Inter, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            mindmapNodes.forEach(n => {
+                ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--surface').trim(); ctx.strokeStyle = getComputedStyle(document.body).getPropertyValue('--border').trim();
+                ctx.beginPath(); ctx.roundRect(n.x, n.y, 140, 50, 12); ctx.fill(); ctx.stroke();
+                ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--text').trim(); ctx.fillText(n.text.substring(0,18), n.x+70, n.y+25);
+            });
+            const a = document.createElement('a'); a.download = 'mindmap.png'; a.href = canvas.toDataURL('image/png'); a.click();
+        };
+
+        // --- Presentation ---
+        let slidesData = [];
+        let currentSlide = 0;
+
+        document.getElementById('btnGenPres').onclick = async () => {
+            const query = document.getElementById('presQuery').value;
+            const text = await extractAllPDFText();
+            if(!text && !query) { showToast('Provide a PDF or query.', 'error'); return; }
+            
+            showToast(i18n[currentLang].slideWait, 'info');
+            const prompt = `Generate a slide deck (5-8 slides) based on: ${text.substring(0,15000)}\nQuery: ${query}\nFormat strictly as JSON array: [{"title": "Slide Title", "bullets": ["Point 1", "Point 2"]}]. Only output valid JSON.`;
+            
+            try {
+                const res = await fetchAIResponse(prompt, "Output ONLY valid JSON array.");
+                slidesData = parseLLMJSON(res);
+                currentSlide = 0; renderSlides(); fireConfetti();
+            } catch(e) { showToast(e.message === "NoKey" ? i18n[currentLang].errorNoKey : (e.message || i18n[currentLang].errorAPI), 'error'); }
+        };
+
+        function renderSlides() {
+            const container = document.getElementById('slidesContainer');
+            const dots = document.getElementById('slideDots');
+            container.innerHTML = ''; dots.innerHTML = '';
+            
+            slidesData.forEach((s, i) => {
+                const slide = document.createElement('div');
+                slide.className = `slide ${i === currentSlide ? 'active' : ''}`;
+                slide.innerHTML = `<div class="slide-content"><h2 contenteditable="true">${s.title}</h2><ul contenteditable="true">${(s.bullets||[]).map(b=>`<li>${b}</li>`).join('')}</ul></div>`;
+                
+                // Persist edits
+                slide.querySelector('h2').onblur = (e) => s.title = e.target.innerText;
+                slide.querySelector('ul').onblur = (e) => s.bullets = Array.from(e.target.querySelectorAll('li')).map(li=>li.innerText);
+                
+                container.appendChild(slide);
+                
+                const dot = document.createElement('div');
+                dot.className = `slide-dot ${i === currentSlide ? 'active' : ''}`;
+                dot.onclick = () => { currentSlide = i; renderSlides(); };
+                dots.appendChild(dot);
+            });
+        }
+
+        document.getElementById('slidePrev').onclick = () => { if(currentSlide > 0) { currentSlide--; renderSlides(); } };
+        document.getElementById('slideNext').onclick = () => { if(currentSlide < slidesData.length-1) { currentSlide++; renderSlides(); } };
+        document.addEventListener('keydown', (e) => {
+            if(document.getElementById('presentationTab').classList.contains('active') && e.target.tagName !== 'INPUT' && !e.target.isContentEditable) {
+                if(e.key === 'ArrowRight') document.getElementById('slideNext').click();
+                if(e.key === 'ArrowLeft') document.getElementById('slidePrev').click();
+            }
+        });
+
+        document.getElementById('btnExpPdf').onclick = () => {
+            if(slidesData.length === 0) return;
+            const win = window.open('', '_blank');
+            const bg = getComputedStyle(document.body).getPropertyValue('--bg').trim();
+            const text = getComputedStyle(document.body).getPropertyValue('--text').trim();
+            const accent = getComputedStyle(document.body).getPropertyValue('--accent').trim();
+            
+            win.document.write(`
+                <html><head><title>Presentation</title><style>
+                body { font-family: sans-serif; margin:0; padding:0; background: ${bg}; color: ${text}; }
+                .slide { width: 100vw; height: 100vh; display: flex; flex-direction: column; justify-content: center; align-items: center; page-break-after: always; padding: 40px; box-sizing: border-box; }
+                .content { text-align: left; max-width: 800px; width: 100%; }
+                h2 { font-size: 3rem; margin-bottom: 2rem; color: ${accent}; }
+                ul { font-size: 1.5rem; line-height: 1.6; }
+                li { margin-bottom: 1rem; }
+                </style></head><body>
+                ${slidesData.map(s => `<div class="slide"><div class="content"><h2>${s.title}</h2><ul>${(s.bullets||[]).map(b=>`<li>${b}</li>`).join('')}</ul></div></div>`).join('')}
+                </body></html>
+            `);
+            win.document.close(); win.focus();
+            setTimeout(() => { win.print(); win.close(); }, 800);
+        };
+
+        // Initialize translations
+        applyTranslations();
+    </script>
+</body>
+</html>
