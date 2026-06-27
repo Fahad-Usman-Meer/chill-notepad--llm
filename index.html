@@ -127,7 +127,7 @@
 
         /* PDF Viewer Tab */
         .pdf-toolbar { display: flex; align-items: center; justify-content: center; gap: 12px; padding: 12px; border-bottom: 1px solid var(--border); background: var(--surface-hover); }
-        .pdf-viewer-area { flex-grow: 1; overflow: auto; display: flex; justify-content: center; background: var(--bg); padding: 24px; }
+        .pdf-viewer-area { flex-grow: 1; overflow: auto; text-align: center; background: var(--bg); padding: 24px; }
         canvas#pdfCanvas { border-radius: 8px; box-shadow: var(--shadow); max-width: none; }
 
         /* Workflow Tab */
@@ -486,26 +486,39 @@
             renderPdfList();
         }
 
-        let renderTask = null;
+        let pageRendering = false;
+        let pageNumPending = null;
+
         async function renderPage(num) {
             if(!currentPdf) return;
-            const page = await currentPdf.pdfDoc.getPage(num);
-            const viewport = page.getViewport({ scale: pdfScale });
-            canvas.height = viewport.height; canvas.width = viewport.width;
             
-            if (renderTask) {
-                renderTask.cancel();
+            if (pageRendering) {
+                pageNumPending = num;
+                return;
             }
-            
-            renderTask = page.render({ canvasContext: ctx, viewport: viewport });
+            pageRendering = true;
+
             try {
-                await renderTask.promise;
+                const page = await currentPdf.pdfDoc.getPage(num);
+                const viewport = page.getViewport({ scale: pdfScale });
+                canvas.height = viewport.height;
+                canvas.width = viewport.width;
+
+                const renderContext = { canvasContext: ctx, viewport: viewport };
+                await page.render(renderContext).promise;
+                
+                document.getElementById('pdfPageNum').innerText = num;
+                document.getElementById('pdfPageCount').innerText = currentPdf.pdfDoc.numPages;
             } catch(e) {
-                // Ignore render cancel errors
+                console.error("PDF Render Error:", e);
             }
-            
-            document.getElementById('pdfPageNum').innerText = num;
-            document.getElementById('pdfPageCount').innerText = currentPdf.pdfDoc.numPages;
+
+            pageRendering = false;
+            if (pageNumPending !== null) {
+                const pending = pageNumPending;
+                pageNumPending = null;
+                renderPage(pending);
+            }
         }
 
         document.getElementById('pdfPrev').onclick = () => { if(pageNum <= 1) return; pageNum--; renderPage(pageNum); };
