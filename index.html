@@ -156,9 +156,9 @@
         .slides-container { position: relative; width: 100%; max-width: 900px; aspect-ratio: 16/9; background: var(--surface); border-radius: 24px; box-shadow: var(--shadow); overflow: hidden; border: 1px solid var(--border); }
         .slide { position: absolute; top: 0; left: 0; width: 100%; height: 100%; padding: 60px; opacity: 0; pointer-events: none; transition: opacity 0.5s ease; display: flex; flex-direction: column; justify-content: center; }
         .slide.active { opacity: 1; pointer-events: auto; }
-        .slide h2 { font-size: 3rem; margin-bottom: 2rem; color: var(--accent); outline: none; }
+        .slide h2 { font-size: clamp(1.8rem, 4vw, 2.5rem); margin-bottom: 1.5rem; color: var(--accent); outline: none; line-height: 1.3; }
         .slide h2:focus, .slide ul:focus { background: rgba(157, 114, 255, 0.05); border-radius: 8px; }
-        .slide ul { font-size: 1.5rem; line-height: 1.8; color: var(--text); outline: none; padding-inline-start: 2rem; }
+        .slide ul { font-size: clamp(1rem, 2vw, 1.25rem); line-height: 1.6; color: var(--text); outline: none; padding-inline-start: 2rem; }
         .slide-dots { position: absolute; bottom: 24px; left: 50%; transform: translateX(-50%); display: flex; gap: 8px; z-index: 20; }
         .slide-dot { width: 12px; height: 12px; border-radius: 50%; background: var(--border); cursor: pointer; transition: var(--transition); }
         .slide-dot.active { background: var(--accent); transform: scale(1.2); }
@@ -260,8 +260,8 @@
                     <button class="btn" id="pdfPrev">&larr;</button>
                     <span style="font-size: 0.9rem; font-weight: 500;"><span data-i18n="page">Page</span> <span id="pdfPageNum">0</span> <span data-i18n="of">of</span> <span id="pdfPageCount">0</span></span>
                     <button class="btn" id="pdfNext">&rarr;</button>
-                    <button class="btn" id="pdfZoomOut" data-i18n="zoomOut">Zoom Out</button>
-                    <button class="btn" id="pdfZoomIn" data-i18n="zoomIn">Zoom In</button>
+                    <button class="btn" id="pdfZoomOut" title="Zoom Out"><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14zM7 9h5v1H7z"/></svg></button>
+                    <button class="btn" id="pdfZoomIn" title="Zoom In"><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14zM10 6H9v3H6v1h3v3h1v-3h3V9h-3V6z"/></svg></button>
                 </div>
                 <div class="pdf-viewer-area" id="pdfContainer">
                     <canvas id="pdfCanvas"></canvas>
@@ -486,32 +486,49 @@
             renderPdfList();
         }
 
+        let renderTask = null;
         async function renderPage(num) {
             if(!currentPdf) return;
             const page = await currentPdf.pdfDoc.getPage(num);
             const viewport = page.getViewport({ scale: pdfScale });
             canvas.height = viewport.height; canvas.width = viewport.width;
-            await page.render({ canvasContext: ctx, viewport: viewport }).promise;
+            
+            if (renderTask) {
+                renderTask.cancel();
+            }
+            
+            renderTask = page.render({ canvasContext: ctx, viewport: viewport });
+            try {
+                await renderTask.promise;
+            } catch(e) {
+                // Ignore render cancel errors
+            }
+            
             document.getElementById('pdfPageNum').innerText = num;
             document.getElementById('pdfPageCount').innerText = currentPdf.pdfDoc.numPages;
         }
 
         document.getElementById('pdfPrev').onclick = () => { if(pageNum <= 1) return; pageNum--; renderPage(pageNum); };
         document.getElementById('pdfNext').onclick = () => { if(currentPdf && pageNum >= currentPdf.pdfDoc.numPages) return; pageNum++; renderPage(pageNum); };
-        document.getElementById('pdfZoomIn').onclick = () => { pdfScale += 0.2; renderPage(pageNum); };
-        document.getElementById('pdfZoomOut').onclick = () => { pdfScale = Math.max(0.4, pdfScale - 0.2); renderPage(pageNum); };
+        document.getElementById('pdfZoomIn').onclick = () => { pdfScale += 0.25; renderPage(pageNum); };
+        document.getElementById('pdfZoomOut').onclick = () => { pdfScale = Math.max(0.25, pdfScale - 0.25); renderPage(pageNum); };
 
         async function extractAllPDFText() {
-            let fullText = "";
+            let allText = [];
             for (const file of pdfFiles) {
+                let fileText = `--- Document: ${file.name} ---\n`;
+                let charsExtracted = 0;
                 for (let i = 1; i <= file.pdfDoc.numPages; i++) {
                     const page = await file.pdfDoc.getPage(i);
                     const content = await page.getTextContent();
-                    fullText += content.items.map(item => item.str).join(" ") + " ";
-                    if (fullText.length > 30000) return fullText; // Limit for LLM context
+                    const pageText = content.items.map(item => item.str).join(" ") + " ";
+                    fileText += pageText;
+                    charsExtracted += pageText.length;
+                    if (charsExtracted > 50000) break; // Limit per file so multiple files can be processed
                 }
+                allText.push(fileText);
             }
-            return fullText;
+            return allText.join("\n\n").substring(0, 200000);
         }
 
         // --- LLM API Logic ---
@@ -592,7 +609,7 @@
                 let promptText = "History:\n";
                 chatMessages.slice(-6).forEach(m => promptText += `${m.role}: ${m.text}\n`);
                 const pdfContext = await extractAllPDFText();
-                if(pdfContext) promptText += `Context from PDF: ${pdfContext.substring(0,5000)}\n`;
+                if(pdfContext) promptText += `Context from uploaded PDFs:\n${pdfContext.substring(0,200000)}\n\n`;
                 promptText += `User: ${text}\nAI:`;
                 
                 const response = await fetchAIResponse(promptText, "You are a helpful assistant. Keep responses plain text.");
@@ -605,6 +622,13 @@
             }
         };
 
+        document.getElementById('chatInput').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                document.getElementById('btnSendChat').click();
+            }
+        });
+
         // --- Workflow (Mindmap) ---
         let mindmapNodes = [], mindmapLinks = [];
         
@@ -614,7 +638,7 @@
             if(!text && !query) { showToast('Provide a PDF or query.', 'error'); return; }
             
             showToast(i18n[currentLang].mapWait, 'info');
-            const prompt = `Generate a JSON mind-map based on: ${text.substring(0,15000)}\nQuery: ${query}\nFormat strictly as: {"id": "root", "text": "Main", "children": [{"id": "c1", "text": "Sub", "children": []}]}. Only output valid JSON.`;
+            const prompt = `Generate a JSON mind-map based on the following context:\n${text.substring(0,200000)}\n\nQuery: ${query}\nFormat strictly as: {"id": "root", "text": "Main", "children": [{"id": "c1", "text": "Sub", "children": []}]}. Only output valid JSON.`;
             
             try {
                 const res = await fetchAIResponse(prompt, "Output ONLY valid JSON.");
@@ -717,7 +741,7 @@
             if(!text && !query) { showToast('Provide a PDF or query.', 'error'); return; }
             
             showToast(i18n[currentLang].slideWait, 'info');
-            const prompt = `Generate a slide deck (5-8 slides) based on: ${text.substring(0,15000)}\nQuery: ${query}\nFormat strictly as JSON array: [{"title": "Slide Title", "bullets": ["Point 1", "Point 2"]}]. Only output valid JSON.`;
+            const prompt = `Generate a slide deck (5-8 slides) based on the following context:\n${text.substring(0,200000)}\n\nQuery: ${query}\nFormat strictly as JSON array: [{"title": "Slide Title", "bullets": ["Point 1", "Point 2"]}]. Only output valid JSON.`;
             
             try {
                 const res = await fetchAIResponse(prompt, "Output ONLY valid JSON array.");
